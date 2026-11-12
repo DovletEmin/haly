@@ -21,6 +21,14 @@ jobs:
           cmp /tmp/a.svg /tmp/b.svg
           python src/haly.py --input examples/sample.json --out /tmp/still.svg --no-animation
           ! grep -q '<style>' /tmp/still.svg
+      - name: Every style, with a Turkmen inscription, twice
+        run: |
+          for s in tekke yomut salor saryk ersari; do
+            python src/haly.py --input examples/sample.json --out /tmp/$s-1.svg --style $s --inscription 'Aşgabat · Ýüpek {year} {total}'
+            python src/haly.py --input examples/sample.json --out /tmp/$s-2.svg --style $s --inscription 'Aşgabat · Ýüpek {year} {total}'
+            cmp /tmp/$s-1.svg /tmp/$s-2.svg
+          done
+          ! python src/haly.py --input examples/sample.json --out /tmp/x.svg --style nope
 
   action:
     runs-on: ubuntu-latest
@@ -29,7 +37,12 @@ jobs:
       - uses: ./
         with:
           outputs: dist/carpet.svg
+      - uses: ./
+        with:
+          outputs: dist/carpet-yomut.svg
+          style: yomut
+          inscription: '{user} · {year}'
       - uses: actions/upload-artifact@v4
         with:
           name: carpet
-          path: dist/carpet.svg
+          path: dist/

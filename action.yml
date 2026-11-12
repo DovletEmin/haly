@@ -22,6 +22,14 @@ inputs:
     description: 'Replay the weaving when the image loads.'
     required: false
     default: 'true'
+  style:
+    description: 'Weaving group whose guls, borders and dyes to use: tekke, yomut, salor, saryk or ersari.'
+    required: false
+    default: 'tekke'
+  inscription:
+    description: 'Text knotted into a cartouche in the top border. {user}, {year} and {total} are filled in. Latin letters, digits and Turkmen letters. Empty for none.'
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -41,7 +49,10 @@ runs:
         HALY_USER: ${{ inputs.github_user_name }}
         HALY_OUT: ${{ inputs.outputs }}
         HALY_ANIMATE: ${{ inputs.animate }}
+        HALY_STYLE: ${{ inputs.style }}
+        HALY_INSCRIPTION: ${{ inputs.inscription }}
       run: |
         flag=""
         if [ "$HALY_ANIMATE" = "false" ]; then flag="--no-animation"; fi
-        python "$GITHUB_ACTION_PATH/src/haly.py" --user "$HALY_USER" --out "$HALY_OUT" $flag
+        python "$GITHUB_ACTION_PATH/src/haly.py" --user "$HALY_USER" --out "$HALY_OUT" \
+          --style "$HALY_STYLE" --inscription "$HALY_INSCRIPTION" $flag

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Weaves a year of GitHub contributions into a Tekke Turkmen carpet.
+"""Weaves a year of GitHub contributions into a Turkmen carpet.
 
 The rug is built the way a real one is. Everything sits on a knot lattice, so
 every motif steps the way a loom forces it to. From the centre out:
@@ -14,6 +14,11 @@ every motif steps the way a loom forces it to. From the centre out:
   kilim        a band of flat weave where the knotting stops.
   fringe       the loose warp, knotted in bundles.
   selvedge     the wrapped cord along the long sides.
+
+That is the Tekke layout. The other groups (Yomut, Salor, Saryk, Ersari) keep
+the structure and bring their own guls, borders and dyes; see styles.py. An
+inscription, if given, is knotted into a cartouche in the top border, the way
+weavers worked names and dates into their rugs.
 
 Realism comes from the filters, not from extra geometry. Wool pile is a noise
 height field lit from one side; knot edges are displaced so colours bleed into
@@ -31,25 +36,17 @@ import sys
 import datetime
 import colorsys
 import typeset as T
+import styles
+import weave_font
 
 FONTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'fonts')
 MONO = T.load(os.path.join(FONTS, 'IBMPlexMono-Medium.ttf'))
 
 K = 2                       # one knot, in px
 
-# --- natural dyes ---------------------------------------------------------
-RED = '#7B2521'             # madder, the Tekke field
-RED_DK = '#4B1918'          # madder over a brown base, border ground
-LATTICE = '#4F181B'         # the dark lines that link the guls
-INDIGO = '#1C2231'
-IVORY = '#E3D5B8'           # undyed wool
-SAFFRON = '#C58C3D'
-ORANGE = '#B4432B'
-RUST = '#93392B'
-CORD = '#2A1716'            # selvedge wrap
-WARP = '#E4DAC6'            # undyed warp, seen in the fringe
 CAPTION = '#8C8175'
 FAINT = '#6E6459'
+INSCRIPTION_MAX = 64      # characters
 
 # --- layout, in knots -----------------------------------------------------
 CELL = 9                    # one day
@@ -115,72 +112,7 @@ def rect(x, y, w, h, fill, extra=''):
     return '<rect x="%g" y="%g" width="%g" height="%g" fill="%s"%s/>' % (x, y, w, h, fill, extra)
 
 
-# --- motifs ---------------------------------------------------------------
-def octagon(r, trim=0):
-    lim = r + r // 2 - trim
-    return {(x, y) for x in range(-r, r + 1) for y in range(-r, r + 1)
-            if abs(x) + abs(y) <= lim}
-
-
-def diamond(r):
-    return {(x, y) for x in range(-r, r + 1) for y in range(-r, r + 1) if abs(x) + abs(y) <= r}
-
-
-def gul(r, a, b, eye, line=INDIGO, dot=None, hooks=None):
-    """A quartered octagon: opposite quarters share a dye, as on a Tekke gul."""
-    full = octagon(r)
-    inner = {p for p in octagon(r, 1) if abs(p[0]) < r and abs(p[1]) < r}
-    k = {}
-    for p in full:
-        x, y = p
-        if p not in inner:
-            k[p] = line
-        elif x == 0 or y == 0:
-            k[p] = line
-        else:
-            k[p] = a if x * y > 0 else b
-    if dot and r >= 4:
-        for sx in (-1, 1):
-            for sy in (-1, 1):
-                k[(2 * sx, 2 * sy)] = dot
-    k[(0, 0)] = eye
-    if hooks:
-        for sx in (-1, 1):
-            for sy in (-1, 1):
-                k[(r * sx, r * sy)] = hooks
-    return k
-
-
-def small(r, fill, line, eye):
-    k = {p: (line if abs(p[0]) + abs(p[1]) == r else fill) for p in diamond(r)}
-    k[(0, 0)] = eye
-    return k
-
-
-def ashik(c):
-    """Hooked diamond of the elem panels."""
-    k = {p: c for p in diamond(4) if abs(p[0]) + abs(p[1]) == 4}
-    k.update({p: INDIGO for p in diamond(1)})
-    k[(0, 0)] = c
-    for sx, sy in ((1, 1), (-1, -1), (1, -1), (-1, 1)):
-        k[(2 * sx, 2 * sy)] = c          # hooks turning inward
-    return k
-
-
-# Day guls, quiet to busy. Each has two colourings, alternated across the
-# field the way neighbouring guls swap dyes on a real rug.
-DAY = {
-    1: (small(1, RUST, RUST, INDIGO), small(1, RUST, RUST, INDIGO)),
-    2: (small(2, ORANGE, INDIGO, SAFFRON), small(2, ORANGE, INDIGO, IVORY)),
-    3: (gul(3, SAFFRON, ORANGE, IVORY), gul(3, ORANGE, SAFFRON, IVORY)),
-    4: (gul(4, IVORY, SAFFRON, ORANGE, dot=ORANGE, hooks=SAFFRON),
-        gul(4, SAFFRON, IVORY, ORANGE, dot=INDIGO, hooks=IVORY)),
-}
-BORDER_OCT = (gul(4, IVORY, ORANGE, INDIGO, dot=INDIGO), gul(4, ORANGE, IVORY, INDIGO, dot=IVORY))
-BORDER_STAR = small(2, SAFFRON, INDIGO, RED_DK)
-ELEM_MOTIF = (ashik(IVORY), ashik(SAFFRON))
-
-
+# --- motifs live in styles.py ----------------------------------------------
 def symbol(sid, knots):
     """Motif centred on the top-left corner of its middle knot."""
     return '<g id="%s">%s</g>' % (sid, paths(knots))
@@ -212,8 +144,10 @@ def pearls(on, pearl_cols):
     return c
 
 
-def barber(along, across):
-    return (INDIGO, IVORY, ORANGE)[((along + across) // 2) % 3]
+def barber(cols):
+    def c(along, across):
+        return cols[((along + across) // 2) % 3]
+    return c
 
 
 def spaced(a, b, period):
@@ -242,7 +176,8 @@ def thresholds(weeks):
 
 
 # --- the rug --------------------------------------------------------------
-def pile_layers(weeks):
+def pile_layers(weeks, st, text=''):
+    p = st.p
     t1, t2, t3 = thresholds(weeks)
 
     def level(n):
@@ -252,12 +187,12 @@ def pile_layers(weeks):
 
     out = []
     # ground: guards first, then the red of field and elem with its abrash
-    out.append(rect(0, 0, PILE_W * K, PILE_H * K, RED_DK))
+    out.append(rect(0, 0, PILE_W * K, PILE_H * K, p.border))
     ground = [(GUARD, GUARD, ELEM, PILE_H - 2 * GUARD),
               (PILE_W - GUARD - ELEM, GUARD, ELEM, PILE_H - 2 * GUARD),
               (FX, FY, FIELD_W, FIELD_H)]
     for gx, gy, gw, gh in ground:
-        out.append(rect(gx * K, gy * K, gw * K, gh * K, RED))
+        out.append(rect(gx * K, gy * K, gw * K, gh * K, p.ground))
 
     # abrash: bands across the warp, wherever a new dye lot was started
     x, i = 0, 0
@@ -269,21 +204,22 @@ def pile_layers(weeks):
         for gx, gy, gw, gh in ground:
             a, b = max(x, gx), min(x + w, gx + gw)
             if a < b:
-                out.append(rect(a * K, gy * K, (b - a) * K, gh * K, shift(RED, dl)))
+                out.append(rect(a * K, gy * K, (b - a) * K, gh * K, shift(p.ground, dl)))
         x += w
         i += 1
 
-    # the lattice that links the guls
+    # the lattice that links the guls, where the group uses one
     lat = {}
     for r in range(ROWS):
         y = FY + r * CELL + CELL // 2
         for xx in range(FX, FX + FIELD_W):
-            lat[(xx, y)] = LATTICE
+            lat[(xx, y)] = p.lattice
     for c in range(WEEKS):
         xx = FX + c * CELL + CELL // 2
         for y in range(FY, FY + FIELD_H):
-            lat[(xx, y)] = LATTICE
-    out.append(paths(lat))
+            lat[(xx, y)] = p.lattice
+    if p.lattice:
+        out.append(paths(lat))
 
     # one gul per day
     for ci, wk in enumerate(weeks):
@@ -295,36 +231,63 @@ def pile_layers(weeks):
                                FX + ci * CELL + CELL // 2, FY + ri * CELL + CELL // 2))
 
     # minor stripes
-    out.append(paths(frame(0, 0, PILE_W, PILE_H, GUARD, pearls(RED_DK, (INDIGO, INDIGO, IVORY, INDIGO)))))
+    outer_pearl = p.red if st.light_border else p.light
+    out.append(paths(frame(0, 0, PILE_W, PILE_H, GUARD,
+                           pearls(p.border, (p.dark, p.dark, outer_pearl, p.dark)))))
     mx, my = GUARD + ELEM, GUARD
     mw, mh = PILE_W - 2 * mx, PILE_H - 2 * my
-    out.append(paths(frame(mx, my, mw, mh, GUARD, barber)))
+    out.append(paths(frame(mx, my, mw, mh, GUARD, barber((p.dark, p.light, p.red)))))
     ix, iy = FX - GUARD, FY - GUARD
     out.append(paths(frame(ix, iy, FIELD_W + 2 * GUARD, FIELD_H + 2 * GUARD, GUARD,
-                           pearls(INDIGO, (IVORY, INDIGO, SAFFRON, INDIGO)))))
+                           pearls(p.dark, (p.light, p.dark, p.gold, p.dark)))))
 
-    # main border: octagons and stars, corners left as the count falls
+    # the inscription's cartouche, centred in the top border
     bx0, by0 = mx + GUARD + BORDER // 2, my + GUARD + BORDER // 2
     bx1, by1 = PILE_W - 1 - bx0, PILE_H - 1 - by0
-    xs, ys = spaced(bx0, bx1, 10), spaced(by0, by1, 10)
-    spots = [(x, by0) for x in xs] + [(x, by1) for x in xs]
-    spots += [(bx0, y) for y in ys[1:-1]] + [(bx1, y) for y in ys[1:-1]]
-    for n, (x, y) in enumerate(spots):
-        idx = xs.index(x) if y in (by0, by1) else ys.index(y)
-        if idx % 2 == 0:
-            out.append(use('bo%s' % 'ab'[(idx // 2) % 2], x, y))
-        else:
-            out.append(use('bs', x, y))
+    cart, cart_knots = None, {}
+    if text:
+        glyphs, tw = weave_font.render(text)
+        cx0 = PILE_W // 2 - tw // 2 - 3           # frame, two knots of padding
+        cx1 = cx0 + tw + 5
+        cy0, cy1 = my + GUARD, my + GUARD + BORDER - 1
+        cart = (cx0, cx1)
+        for x in range(cx0, cx1 + 1):
+            for y in range(cy0, cy1 + 1):
+                edge = x in (cx0, cx1) or y in (cy0, cy1)
+                cart_knots[(x, y)] = p.gold if edge else p.dark
+        base = cy0 + 4                            # row 0; marks clear the frame
+        for gx, gy in glyphs:
+            cart_knots[(cx0 + 3 + gx, base + gy)] = p.light
 
-    # elem: a stem with hooked diamonds strung along it
+    # main border: either a running band or motifs counted out along it
+    if st.border_band:
+        out.append(paths(frame(mx + GUARD, my + GUARD, mw - 2 * GUARD, mh - 2 * GUARD,
+                               BORDER, st.border_band)))
+    else:
+        xs, ys = spaced(bx0, bx1, 10), spaced(by0, by1, 10)
+        spots = [(x, by0) for x in xs] + [(x, by1) for x in xs]
+        spots += [(bx0, y) for y in ys[1:-1]] + [(bx1, y) for y in ys[1:-1]]
+        for x, y in spots:
+            if cart and y == by0 and cart[0] - 5 <= x <= cart[1] + 5:
+                continue                          # the cartouche takes this stretch
+            idx = xs.index(x) if y in (by0, by1) else ys.index(y)
+            if idx % 2 == 0:
+                out.append(use('bo%s' % 'ab'[(idx // 2) % 2], x, y))
+            else:
+                out.append(use('bs', x, y))
+    if cart:
+        out.append(paths(cart_knots))
+
+    # elem: a stem with motifs strung along it
     for ex in (GUARD + ELEM // 2, PILE_W - 1 - GUARD - ELEM // 2):
-        out.append(rect(ex * K, (GUARD + 1) * K, K, (PILE_H - 2 * GUARD - 2) * K, LATTICE))
+        out.append(rect(ex * K, (GUARD + 1) * K, K, (PILE_H - 2 * GUARD - 2) * K,
+                        p.lattice or shift(p.ground, -0.08)))
         for n, y in enumerate(spaced(GUARD + 6, PILE_H - 1 - GUARD - 6, 11)):
             out.append(use('e%s' % 'ab'[n % 2], ex, y))
     return ''.join(out)
 
 
-def fringe_svg(x, y0, height, direction):
+def fringe_svg(x, y0, height, direction, warp):
     """Loose warp, gathered into bundles and knotted near the kilim.
 
     Bundles are uneven, threads are cut to different lengths and some stray
@@ -358,16 +321,31 @@ def fringe_svg(x, y0, height, direction):
                      % (kx, yc + 0.2, min(2.2, group * 0.26)))
         y += group + 0.3
         g += 1
-    cols = (shift(WARP, -0.12), shift(WARP, -0.05), WARP)
+    cols = (shift(warp, -0.12), shift(warp, -0.05), warp)
     out = ''.join('<path d="%s" stroke="%s"/>' % (''.join(v), cols[k]) for k, v in sorted(tones.items()))
     return ('<g fill="none" stroke-width="1" stroke-linecap="round">%s</g>'
-            '<g fill="%s">%s</g>' % (out, shift(WARP, -0.10), ''.join(knots)))
+            '<g fill="%s">%s</g>' % (out, shift(warp, -0.10), ''.join(knots)))
 
 
-def build(data, animate=True):
-    """data: the GraphQL response for the user's contributionsCollection."""
+def inscription_text(template, user, total, last_day):
+    """Fill {user}, {year} and {total}, then keep what can be woven."""
+    s = (template or '').replace('{user}', user or '')
+    s = s.replace('{year}', last_day[:4]).replace('{total}', format(total, ','))
+    return weave_font.clean(s, INSCRIPTION_MAX)
+
+
+def build(data, animate=True, style='tekke', inscription='', user=''):
+    """data: the GraphQL response for the user's contributionsCollection.
+
+    style: tekke, yomut, salor, saryk or ersari.
+    inscription: text knotted into the top border; {user}, {year} and {total}
+    are filled in. Empty for none."""
+    st = styles.get(style)
+    p = st.p
     c, weeks = parse(data)
     cal = c['contributionCalendar']
+    text = inscription_text(inscription, user, cal['totalContributions'],
+                            weeks[-1]['contributionDays'][-1]['date'])
 
     pw, ph = PILE_W * K, PILE_H * K
     kw = KILIM * K
@@ -376,17 +354,19 @@ def build(data, animate=True):
     W = pw + 2 * rx
     H = ph + 2 * MARGIN + CAPTION_H
 
-    defs = [symbol('d%d%s' % (lv, 'ab'[v]), DAY[lv][v]) for lv in DAY for v in (0, 1)]
-    defs += [symbol('bo' + 'ab'[v], BORDER_OCT[v]) for v in (0, 1)]
-    defs += [symbol('bs', BORDER_STAR)]
-    defs += [symbol('e' + 'ab'[v], ELEM_MOTIF[v]) for v in (0, 1)]
+    defs = [symbol('d%d%s' % (lv, 'ab'[v]), st.day[lv][v]) for lv in st.day for v in (0, 1)]
+    if st.border_symbols:
+        octs, star = st.border_symbols
+        defs += [symbol('bo' + 'ab'[v], octs[v]) for v in (0, 1)]
+        defs += [symbol('bs', star)]
+    defs += [symbol('e' + 'ab'[v], st.elem[v]) for v in (0, 1)]
 
-    pile = pile_layers(weeks)
+    pile = pile_layers(weeks, st, text)
 
     # kilim ends: flat weave in madder with indigo stripes
     def kilim(x):
-        s = [rect(x, ry, kw, ph, shift(RED, -0.02))]
-        for off, w, col in ((1, 1, INDIGO), (3, 0.5, IVORY)):
+        s = [rect(x, ry, kw, ph, shift(p.ground, -0.02))]
+        for off, w, col in ((1, 1, p.dark), (3, 0.5, p.light)):
             s.append(rect(x + off * K, ry, w * K, ph, col))
         return ''.join(s)
 
@@ -414,9 +394,9 @@ def build(data, animate=True):
         lx -= 18
     quiet_d, _ = T.typeset(MONO, 'QUIET', 9.5, lx + 18 - 12 - quiet_w, cap_y - 0.5, tracking=0.13)
 
-    label = ('%s GitHub contributions over the past year, woven as a Tekke Turkmen carpet. '
+    label = ('%s GitHub contributions over the past year, woven as a %s Turkmen carpet. '
              'Each gul is one day; the busier the day, the larger and paler the gul.'
-             % format(total, ','))
+             % (format(total, ','), st.title))
 
     svg = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" aria-label="{label}">
   <title>{label}</title>
@@ -521,10 +501,10 @@ def build(data, animate=True):
   <rect id="shuttle" x="{shx}" y="{st}" width="2" height="{sh}" fill="{IVORY}" opacity="0"/>
 </svg>
 '''.format(
-        W=W, H=H, label=label, K=K, CORD=CORD, IVORY=IVORY, CAPTION=CAPTION, FAINT=FAINT,
+        W=W, H=H, label=label, K=K, CORD=p.cord, IVORY=p.light, CAPTION=CAPTION, FAINT=FAINT,
         defs=''.join(defs), pile=pile, rx=rx, ry=ry, pw=pw, ph=ph,
-        fringe_l=fringe_svg(rx - kw, ry, ph, -1),
-        fringe_r=fringe_svg(rx + pw + kw, ry, ph, 1),
+        fringe_l=fringe_svg(rx - kw, ry, ph, -1, p.warp),
+        fringe_r=fringe_svg(rx + pw + kw, ry, ph, 1, p.warp),
         kilim_l=kilim(rx - kw), kilim_r=kilim(rx + pw),
         sx=rx - kw, sw=pw + 2 * kw, st=ry - 2.5, sb=ry + ph - 2, sh=ph + 4.5,
         shx=rx - kw, sweep=pw + 2 * kw,

@@ -3,6 +3,7 @@
 
     python haly.py --user octocat --out dist/carpet.svg        # needs GITHUB_TOKEN
     python haly.py --input calendar.json --out carpet.svg      # offline
+    python haly.py --user octocat --style yomut --inscription '{user} {year}'
 
 Uses only the standard library plus fonttools.
 """
@@ -54,6 +55,10 @@ def main(argv=None):
     p.add_argument('--input', help='read a saved GraphQL response instead of calling the API')
     p.add_argument('--out', default='dist/carpet.svg', help='where to write the SVG')
     p.add_argument('--no-animation', action='store_true', help='skip the weaving animation')
+    p.add_argument('--style', default='tekke',
+                   help='weaving group: tekke, yomut, salor, saryk or ersari')
+    p.add_argument('--inscription', default='',
+                   help='text knotted into the top border; {user}, {year}, {total} are filled in')
     p.add_argument('--api', default=os.environ.get('GITHUB_GRAPHQL_URL', 'https://api.github.com/graphql'))
     a = p.parse_args(argv)
 
@@ -72,7 +77,8 @@ def main(argv=None):
     if not cal['weeks']:
         sys.exit('The contribution calendar came back empty.')
 
-    svg = carpet.build(data, animate=not a.no_animation)
+    svg = carpet.build(data, animate=not a.no_animation, style=a.style,
+                       inscription=a.inscription, user=a.user or '')
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     with open(a.out, 'w', encoding='utf-8', newline='\n') as f:
         f.write(svg)
