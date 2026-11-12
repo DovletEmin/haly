@@ -1,0 +1,47 @@
+name: 'Haly: contribution carpet'
+description: 'Weave your GitHub contribution year into a realistic Turkmen carpet, as an SVG for your profile README.'
+author: 'Dovlet Eminov'
+branding:
+  icon: 'grid'
+  color: 'red'
+
+inputs:
+  github_user_name:
+    description: 'Whose contributions to weave. Defaults to the repository owner.'
+    required: false
+    default: ${{ github.repository_owner }}
+  github_token:
+    description: 'Token for the GraphQL API. The default token sees public contributions; a classic PAT with read:user also counts private ones.'
+    required: false
+    default: ${{ github.token }}
+  outputs:
+    description: 'Where to write the SVG, relative to the workspace.'
+    required: false
+    default: 'dist/carpet.svg'
+  animate:
+    description: 'Replay the weaving when the image loads.'
+    required: false
+    default: 'true'
+
+runs:
+  using: 'composite'
+  steps:
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install fonttools
+      shell: bash
+      run: python -m pip install --quiet --disable-pip-version-check 'fonttools>=4.40,<5'
+
+    - name: Weave
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+        HALY_USER: ${{ inputs.github_user_name }}
+        HALY_OUT: ${{ inputs.outputs }}
+        HALY_ANIMATE: ${{ inputs.animate }}
+      run: |
+        flag=""
+        if [ "$HALY_ANIMATE" = "false" ]; then flag="--no-animation"; fi
+        python "$GITHUB_ACTION_PATH/src/haly.py" --user "$HALY_USER" --out "$HALY_OUT" $flag

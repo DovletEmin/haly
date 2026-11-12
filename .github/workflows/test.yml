@@ -1,0 +1,35 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  offline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m pip install --quiet 'fonttools>=4.40,<5'
+      - name: Weave the sample twice and check it is deterministic
+        run: |
+          python src/haly.py --input examples/sample.json --out /tmp/a.svg
+          python src/haly.py --input examples/sample.json --out /tmp/b.svg
+          cmp /tmp/a.svg /tmp/b.svg
+          python src/haly.py --input examples/sample.json --out /tmp/still.svg --no-animation
+          ! grep -q '<style>' /tmp/still.svg
+
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          outputs: dist/carpet.svg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: carpet
+          path: dist/carpet.svg
