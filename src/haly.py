@@ -74,7 +74,7 @@ def main(argv=None):
 
     svg = carpet.build(data, animate=not a.no_animation)
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
-    with open(a.out, 'w', encoding='utf-8') as f:
+    with open(a.out, 'w', encoding='utf-8', newline='\n') as f:
         f.write(svg)
     print('woven %s contributions -> %s (%d KB)'
           % (format(cal['totalContributions'], ','), a.out, len(svg.encode()) // 1024))

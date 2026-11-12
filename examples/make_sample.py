@@ -25,5 +25,5 @@ json.dump({'data': {'user': {'contributionsCollection': {
     'totalCommitContributions': total,
     'totalRepositoriesWithContributedCommits': 21,
     'contributionCalendar': {'totalContributions': total, 'weeks': weeks}}}}},
-    open('sample.json', 'w'), indent=1)
+    open('sample.json', 'w', newline='\n'), indent=1)
 print('wrote sample.json,', total, 'contributions')

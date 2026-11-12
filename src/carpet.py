@@ -542,6 +542,6 @@ if __name__ == '__main__':
     out = sys.argv[2] if len(sys.argv) > 2 else 'out/carpet.svg'
     with open(src, encoding='utf-8') as f:
         svg = build(json.load(f))
-    with open(out, 'w', encoding='utf-8') as f:
+    with open(out, 'w', encoding='utf-8', newline='\n') as f:
         f.write(svg)
     print('woven ->', out)
